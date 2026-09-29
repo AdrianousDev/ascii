@@ -6,8 +6,12 @@ Este projeto contém dois programas independentes:
 - `alien.cpp`: um rosto alienígena girando, escrito em C++.
 
 Execute os comandos abaixo na pasta que contém os dois arquivos. As animações
-usam sequências ANSI para atualizar a tela. Use um terminal com pelo menos 80
-colunas e 24 linhas. Pressione `Ctrl+C` para encerrar.
+usam sequências ANSI para atualizar a tela. Elas se ajustam ao tamanho atual do
+terminal, ocupando até 85% das colunas e linhas com uma margem centralizada.
+Em uma janela Full HD, o tamanho em caracteres depende da fonte e do zoom; uma
+área de cerca de 190 colunas por 54 linhas oferece uma figura grande com margem.
+Para janelas menores, recomenda-se pelo menos 80 colunas e 24 linhas. O tamanho
+é atualizado ao redimensionar a janela. Pressione `Ctrl+C` para encerrar.
 
 ## Linux
 

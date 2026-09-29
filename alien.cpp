@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <array>
 #include <chrono>
 #include <cmath>
 #include <csignal>
@@ -8,10 +7,10 @@
 #include <limits>
 #include <string>
 #include <thread>
+#include <vector>
+#include "terminal_size.h"
 
 namespace {
-constexpr int width = 79;
-constexpr int height = 23;
 constexpr float pi = 3.14159265f;
 volatile std::sig_atomic_t running = 1;
 
@@ -68,12 +67,15 @@ char faceDetail(Point p) {
     return '\0';
 }
 
-std::string render(float yaw, float pitch) {
+std::string render(float yaw, float pitch, int width, int height) {
     const Rotation rotation(yaw, pitch);
-    std::array<char, width * height> pixels;
-    std::array<float, width * height> depth;
-    pixels.fill(' ');
-    depth.fill(std::numeric_limits<float>::infinity());
+    std::vector<char> pixels(static_cast<size_t>(width) * height, ' ');
+    std::vector<float> depth(static_cast<size_t>(width) * height,
+                             std::numeric_limits<float>::infinity());
+    const float scale_y = std::min(height * 1.40f, width * 0.74f);
+    const float scale_x = 2.0f * scale_y;
+    const float center_x = (width - 1) * 0.5f;
+    const float center_y = (height - 1) * 0.5f;
 
     constexpr char shades[] = ".:-=+*#%@";
     constexpr int shadeCount = sizeof(shades) - 2;
@@ -88,13 +90,13 @@ std::string render(float yaw, float pitch) {
                           0.83f * std::cos(latitude) * std::cos(longitude)};
             const Point turned = rotation.apply(p);
             const float distance = 4.2f - turned.z;
-            const int x = static_cast<int>(std::lround(39.0f + 67.0f * turned.x / distance));
-            const int y = static_cast<int>(std::lround(11.0f - 32.0f * turned.y / distance));
+            const int x = static_cast<int>(std::lround(center_x + scale_x * turned.x / distance));
+            const int y = static_cast<int>(std::lround(center_y - scale_y * turned.y / distance));
             if (x < 0 || x >= width || y < 0 || y >= height) {
                 continue;
             }
 
-            const int index = y * width + x;
+            const size_t index = static_cast<size_t>(y) * width + x;
             if (distance >= depth[index]) {
                 continue;
             }
@@ -113,9 +115,9 @@ std::string render(float yaw, float pitch) {
     }
 
     std::string frame;
-    frame.reserve((width + 1) * height);
+    frame.reserve(static_cast<size_t>(width + 1) * height);
     for (int y = 0; y < height; ++y) {
-        frame.append(pixels.data() + y * width, width);
+        frame.append(pixels.data() + static_cast<size_t>(y) * width, width);
         frame += '\n';
     }
     return frame;
@@ -124,17 +126,31 @@ std::string render(float yaw, float pitch) {
 
 int main(int argc, char* argv[]) {
     if (argc > 1 && std::strcmp(argv[1], "--once") == 0) {
-        std::cout << render(0.0f, 0.0f);
+        const TerminalViewport viewport = terminal_viewport();
+        std::cout << render(0.0f, 0.0f, viewport.width, viewport.height);
         return 0;
     }
 
     std::signal(SIGINT, stop);
     std::signal(SIGTERM, stop);
-    std::cout << "\x1b[2J\x1b[?25l";
+    std::cout << "\x1b[?25l";
     float yaw = 0.0f;
     float pitch = 0.0f;
+    TerminalViewport previous{0, 0, 0, 0};
     while (running) {
-        std::cout << "\x1b[H" << render(yaw, pitch) << std::flush;
+        const TerminalViewport viewport = terminal_viewport();
+        if (viewport.width != previous.width || viewport.height != previous.height ||
+            viewport.left != previous.left || viewport.top != previous.top) {
+            std::cout << "\x1b[2J";
+            previous = viewport;
+        }
+        const std::string frame = render(yaw, pitch, viewport.width, viewport.height);
+        for (int row = 0; row < viewport.height; ++row) {
+            std::cout << "\x1b[" << viewport.top + row << ';' << viewport.left << 'H';
+            std::cout.write(frame.data() + static_cast<size_t>(row) *
+                            (viewport.width + 1), viewport.width);
+        }
+        std::cout << std::flush;
         yaw += 0.045f;
         pitch = 0.16f * std::sin(yaw * 0.65f);
         std::this_thread::sleep_for(std::chrono::milliseconds(33));
